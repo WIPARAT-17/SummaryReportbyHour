@@ -18,10 +18,11 @@
             line-height: 1.6;
         }
         .container {
-            background-color: #fff;
-            padding: 2.5rem;
-            border-radius: 10px;
-            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.15);
+            background-color: rgb(255, 255, 255); /* ทำให้พื้นหลังโปร่งแสง */
+            backdrop-filter: blur(10px); /* เพิ่มเอฟเฟกต์เบลอแบบกระจกฝ้า */
+            border: 1px solid rgba(255, 255, 255, 0.3); /* เพิ่มขอบสีอ่อนๆ */
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.2); /* ปรับเงาให้ดูมีมิติมากขึ้น */     
+            padding: 2.5rem; 
             text-align: center;
             width: 90%;
             max-width: 700px;
@@ -52,6 +53,7 @@
         }
         .file-upload-label:hover {
             background-color: #ffe279;
+            transform: translateY(-2px); /* มีการขยับเล็กน้อย */
         }
         #file-name {
             margin-top: 10px;
@@ -81,6 +83,7 @@
         }
         #submit-button:hover:not([disabled]) {
             background-color: #757575;
+            transform: translateY(-2px); /* มีการขยับเล็กน้อย */
         }
         button[disabled] {
             background-color: #ccc;
