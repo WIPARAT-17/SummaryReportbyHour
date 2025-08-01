@@ -208,7 +208,7 @@ def process_json_data(raw_json_data, job_id, excel_node_id, excel_agency_name):
     data_to_process = raw_json_data if isinstance(raw_json_data, list) else [raw_json_data]
 
     if not data_to_process:
-        logger.warning(f"Job {job_id}: ไม่มีข้อมูล JSON ให้ประมวลผล")
+        logger.warning(f"ไม่มีข้อมูล JSON ให้ประมวลผล")
         return desired_headers_th, [], {}
 
     # กำหนดค่าเริ่มต้นสำหรับข้อมูลหลัก (รหัสหน่วยงาน, ชื่อหน่วยงาน, Bandwidth)
@@ -277,14 +277,14 @@ def process_json_data(raw_json_data, job_id, excel_node_id, excel_agency_name):
         # คำนวณวันที่ 1 ของเดือนที่แล้ว
         report_start_date = report_end_date.replace(day=1)
         
-        logger.warning(f"Job {job_id}: ไม่พบ Timestamp ที่ถูกต้องในข้อมูล API, ใช้เดือนที่แล้วเป็นวันอ้างอิง: {report_start_date} ถึง {report_end_date}.")
+        logger.warning(f"ไม่พบ Timestamp ที่ถูกต้องในข้อมูล API, ใช้เดือนที่แล้วเป็นวันอ้างอิง: {report_start_date} ถึง {report_end_date}.")
     else:
         # ขยายช่วงเวลาให้ครอบคลุมทั้งเดือนที่ข้อมูล API อยู่
         report_start_date = min_date_from_api.replace(day=1) # วันที่ 1 ของเดือนที่ข้อมูลเริ่มต้น
         # คำนวณวันสิ้นสุดของเดือนสุดท้ายที่มีข้อมูล
         next_month_start_for_max = (max_date_from_api.replace(day=1) + datetime.timedelta(days=32)).replace(day=1)
         report_end_date = next_month_start_for_max - datetime.timedelta(days=1) # วันสุดท้ายของเดือนที่ข้อมูลสิ้นสุด
-        logger.info(f"Job {job_id}: กำหนดช่วงรายงานจากข้อมูล API: {report_start_date} ถึง {report_end_date}.")
+        logger.info(f"กำหนดช่วงรายงานจากข้อมูล API: {report_start_date} ถึง {report_end_date}.")
 
     # สร้างโครงสร้างข้อมูลที่สมบูรณ์สำหรับทุกวันและทุกชั่วโมงในช่วงเวลาที่กำหนด
     # นี่คือการสร้างกรอบเวลา 24 ชั่วโมงต่อวันสำหรับช่วงที่กำหนด
@@ -491,7 +491,7 @@ def export_to_pdf(headers, daily_data, grand_total_row, filename, job_id, node_n
                     date_key = datetime.datetime.strptime(date_time_str, '%Y-%m-%d %H.%M.%S').strftime('%Y-%m-%d')
                 except ValueError:
                     date_key = 'Uncategorized'
-                    logger.warning(f"Job {job_id}: Found uncategorized date for PDF: {date_time_str}")
+                    logger.warning(f"Found uncategorized date for PDF: {date_time_str}")
                 if date_key not in data_by_date:
                     data_by_date[date_key] = []
                 data_by_date[date_key].append(row)
@@ -508,7 +508,7 @@ def export_to_pdf(headers, daily_data, grand_total_row, filename, job_id, node_n
                     }
                     report_month_str = thai_months.get(first_date_obj.month, "ไม่ระบุเดือน")
                 except ValueError:
-                    logger.warning(f"Job {job_id}: Could not parse first date for month determination: {first_date_str}")
+                    logger.warning(f"Could not parse first date for month determination: {first_date_str}")
 
             first_page = True
             sorted_dates = sorted(data_by_date.keys())
@@ -948,10 +948,10 @@ def cancel_job(job_id):
     with status_lock:
         if job_id in processing_status:
             processing_status[job_id]['canceled'] = True # ตั้งค่า flag 'canceled' เป็น True
-            logger.info(f"⛔ ได้รับคำขอยกเลิกงาน (Job ID: {job_id})")
+            logger.info(f"⛔ ได้รับคำขอยกเลิกงาน")
             return jsonify({"message": "Job cancellation requested"}), 200
         else:
-            logger.warning(f"⚠️ พยายามยกเลิกงานที่ไม่พบ (Job ID: {job_id})")
+            logger.warning(f"⚠️ พยายามยกเลิกงานที่ไม่พบ")
             return jsonify({"error": "Job not found"}), 404
 
 @app.route('/download_report/<job_id>')
@@ -964,14 +964,14 @@ def download_report(job_id):
         job_info = processing_status.get(job_id)
 
     if not job_info:
-        logger.error(f"❌ ไม่พบข้อมูลงานสำหรับดาวน์โหลด (Job ID: {job_id})")
+        logger.error(f"❌ ไม่พบข้อมูลงานสำหรับดาวน์โหลด")
         return jsonify({"error": "Job not found or not ready for download. It might be too old or cancelled."}), 404
 
     zip_file_path = job_info.get('zip_file_path')
 
     # ตรวจสอบว่ามี path ไฟล์ ZIP และไฟล์มีอยู่จริงหรือไม่
     if not zip_file_path or not os.path.exists(zip_file_path):
-        logger.error(f"❌ ไม่พบไฟล์ ZIP หรือยังสร้างไม่เสร็จ (Job ID: {job_id}). Path: {zip_file_path}")
+        logger.error(f"❌ ไม่พบไฟล์ ZIP หรือยังสร้างไม่เสร็จ. Path: {zip_file_path}")
         if job_info.get('completed') and not zip_file_path:
             # ถ้างานเสร็จแล้วแต่ไม่มี path ไฟล์ ZIP แสดงว่ามี internal error
             return jsonify({"error": "Report completed with no ZIP file generated (internal error)"}), 500
@@ -980,7 +980,7 @@ def download_report(job_id):
     try:
         directory = tempfile.gettempdir() # Directory ที่เก็บไฟล์ ZIP
         filename = os.path.basename(zip_file_path) # ชื่อไฟล์ ZIP (เช่น "customer_reports_JOBID_YYYYMMDDHHMMSS.zip")
-        logger.info(f"📥 กำลังส่งไฟล์ ZIP: {filename} จาก {directory} (Job ID: {job_id})")
+        logger.info(f"📥 กำลังส่งไฟล์ ZIP: {filename}")
 
         # --- ส่วนที่แก้ไขเพื่อสร้าง download_name แบบมีวันที่ ---
         download_name_final = "Customer Report by Hour.zip" # ชื่อเริ่มต้น fallback
@@ -1020,7 +1020,7 @@ def download_report(job_id):
         return response
 
     except Exception as e:
-        logger.critical(f"❌ ข้อผิดพลาดร้ายแรงในการส่งไฟล์ ZIP: {e} (Job ID: {job_id})")
+        logger.critical(f"❌ ข้อผิดพลาดร้ายแรงในการส่งไฟล์ ZIP: {e}")
         return jsonify({"error": f"Failed to serve file: {e}"}), 500
 
 
@@ -1046,7 +1046,7 @@ def cleanup_old_jobs():
                     jobs_to_remove.append(job_id)
             # ถ้างานไม่เสร็จสมบูรณ์ และค้างอยู่นานเกิน 1/4 ของระยะเวลา retention ให้ถือว่าค้างและลบออก
             elif (not job_info.get('completed')) and (current_time - job_info.get('timestamp', current_time)).total_seconds() > (retention_seconds / 4):
-                logger.warning(f"⚠️ พบงานค้างเก่า (ไม่สมบูรณ์) กำลังถูกลบ: {job_id}")
+                logger.warning(f"⚠️ พบงานค้างเก่า (ไม่สมบูรณ์)")
                 jobs_to_remove.append(job_id)
 
 
@@ -1061,7 +1061,7 @@ def cleanup_old_jobs():
                     os.remove(zip_file_path)
                     #logger.info(f"🗑️ ลบไฟล์ ZIP เก่า: {os.path.basename(zip_file_path)} (Job ID: {job_id})")
                 except Exception as e:
-                    logger.error(f"❌ ข้อผิดพลาดในการลบไฟล์ ZIP เก่า: {e} (Job ID: {job_id})")
+                    logger.error(f"❌ ข้อผิดพลาดในการลบไฟล์ ZIP เก่า: {e} ")
             logger.info(f"✨ ล้างสถานะงานสำหรับ Job ID: {job_id} แล้ว")
     #logger.info("🧹 กระบวนการล้างข้อมูลงานเก่าเสร็จสมบูรณ์")
     # ตั้งเวลาให้ฟังก์ชันนี้ทำงานอีกครั้งในอนาคต (ทุกครึ่งหนึ่งของระยะเวลา retention)
