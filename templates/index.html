@@ -7,7 +7,7 @@
     <style>
         body {
             font-family: 'THSarabunNew', sans-serif; /* ตรวจสอบให้แน่ใจว่าฟอนต์ถูกโหลดหรือมีในระบบ */
-            background-color: #ffd829;
+            
             color: #333;
             display: flex;
             justify-content: center;
@@ -16,6 +16,19 @@
             margin: 0;
             font-size: 1.2rem;
             line-height: 1.6;
+            position: relative;
+            z-index: 1;
+        }
+        #myVideo {
+            position: fixed;
+            right: 0;
+            bottom: 0;
+            min-width: 100%;
+            min-height: 100%;
+            width: auto;
+            height: auto;
+            z-index: -2; /* วางวิดีโอไว้ด้านหลังสุด */
+            object-fit: cover; /* ทำให้วิดีโอเต็มพื้นที่โดยไม่ผิดสัดส่วน */
         }
         .container {
             background-color: rgb(255, 255, 255); /* ทำให้พื้นหลังโปร่งแสง */
@@ -92,7 +105,7 @@
         #status-area {
             margin-top: 2rem;
             padding: 1.5rem;
-            background-color: #fff7b3;
+            background-color: #ffd829;
             border: 1px solid #ffea2d;
             border-radius: 8px;
             display: none; /* Hide by default */
@@ -152,7 +165,10 @@
     </style>
 </head>
 <body>
-
+    <video autoplay muted loop playsinline id="myVideo">
+        <source src="{{ url_for('static', filename='images/Galaxy.mp4') }}" type="video/mp4">
+        Your browser does not support HTML5 video.
+    </video>
 <div class="container">
     <img src="{{ url_for('static', filename='images/Logo-nt.png') }}" alt="โลโก้ NT" style="max-width: 150px; margin-bottom: 20px;">
     <h1>Customer Interface<br>Summary Report by Hour</h1>
