@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Customer Report Generator</title>
+    <style>
+        body {
+            font-family: 'THSarabunNew', sans-serif; /* ตรวจสอบให้แน่ใจว่าฟอนต์ถูกโหลดหรือมีในระบบ */
+            
+            color: #333;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            font-size: 1.2rem;
+            line-height: 1.6;
+            position: relative;
+            z-index: 1;
+        }
+        #myVideo {
+            position: fixed;
+            right: 0;
+            bottom: 0;
+            min-width: 100%;
+            min-height: 100%;
+            width: auto;
+            height: auto;
+            z-index: -2; /* วางวิดีโอไว้ด้านหลังสุด */
+            object-fit: cover; /* ทำให้วิดีโอเต็มพื้นที่โดยไม่ผิดสัดส่วน */
+        }
+        .container {
+            background-color: rgb(255, 255, 255, 0.7); /* ทำให้พื้นหลังโปร่งแสง */
+            backdrop-filter: blur(10px); /* เพิ่มเอฟเฟกต์เบลอแบบกระจกฝ้า */
+            border: 1px solid rgba(255, 255, 255, 0.3); /* เพิ่มขอบสีอ่อนๆ */
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.2); /* ปรับเงาให้ดูมีมิติมากขึ้น */     
+            padding: 2.5rem; 
+            text-align: center;
+            width: 90%;
+            max-width: 700px;
+            max-height: 95vh;
+            overflow-y: auto;
+            margin-top: 2rem;
+        }
+        h1 {
+            color: #555;
+            margin-bottom: 1.5rem;
+            font-size: 2rem;
+        }
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+        input[type="file"] {
+            display: none;
+        }
+        .file-upload-label {
+            background-color: #ffd829;
+            color: #000000;
+            padding: 12px 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.10);
+            cursor: pointer;
+            display: inline-block;
+            transition: background-color 0.3s;
+        }
+        .file-upload-label:hover {
+            background-color: #ffe279;
+            transform: translateY(-2px); /* มีการขยับเล็กน้อย */
+        }
+        #file-name {
+            margin-top: 10px;
+            color: #555;
+            font-size: 1rem;
+        }
+        .button-group {
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+            margin-top: 1.5rem;
+        }
+        button {
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1.2rem;
+            transition: background-color 0.3s;
+            flex-grow: 1;
+            max-width: 200px;
+        }
+        #submit-button {
+            background-color: #000000;
+            color: white;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.10);
+        }
+        #submit-button:hover:not([disabled]) {
+            background-color: #757575;
+            transform: translateY(-2px); /* มีการขยับเล็กน้อย */
+        }
+        button[disabled] {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        #status-area {
+            margin-top: 2rem;
+            padding: 1.5rem;
+            background-color: #ffd829;
+            border: 1px solid #ffea2d;
+            border-radius: 8px;
+            display: none; /* Hide by default */
+            text-align: left;
+        }
+        #status-message {
+            font-size: 1.2rem;
+            color: #555;
+            margin-bottom: 1rem;
+        }
+        .progress-container {
+            width: 100%;
+            background-color: #fffdfd;
+            border-radius: 5px;
+            overflow: hidden;
+            height: 25px;
+        }
+        .progress-bar {
+            width: 0%;
+            background-color: #333333;
+            height: 100%;
+            transition: width 0.3s ease;
+            text-align: center;
+            color: rgb(255, 255, 255);
+            line-height: 25px;
+            font-weight: bold;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.40);
+        }
+        #progress-text {
+            margin-top: 10px;
+            color: #555;
+            font-size: 1rem;
+        }
+        #log-area {
+            margin-top: 1.5rem;
+            padding: 1rem;
+            background-color: #ffffff;
+            border: 1px solid #e0e0e0;
+            border-radius: 5px;
+            max-height: 200px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 0.9rem;
+            white-space: pre-wrap;
+            text-align: left;
+            word-break: break-all;
+        }
+        #log-area div {
+            margin-bottom: 2px;
+        }
+        /* Log message colors based on prefix */
+        .log-success { color: #4CAF50; }
+        .log-error { color: #F44336; }
+        .log-warning { color: #FF9800; }
+        .log-info { color: #2196F3; }
+        .log-critical { color: #D32F2F; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <video autoplay muted loop playsinline id="myVideo">
+        <source src="{{ url_for('static', filename='wallpaper.mp4') }}" type="video/mp4">
+        Your browser does not support HTML5 video.
+    </video>
+<div class="container">
+    <img src="{{ url_for('static', filename='Logo-nt.png') }}" alt="โลโก้ NT" style="max-width: 150px; margin-bottom: 20px;">
+    <h1>Customer Interface<br>Summary Report by Hour</h1>
+    <div class="form-group">
+        <form id="upload-form">
+            <input type="file" id="excel_file" name="excel_file" accept=".xlsx, .xls" required>
+            <label for="excel_file" class="file-upload-label">
+                EXCEL
+            </label>
+            <div id="file-name">ยังไม่ได้เลือกไฟล์</div>
+        </form>
+    </div>
+    <div class="button-group">
+        <button id="submit-button" type="submit" form="upload-form" disabled>EXPORT</button>
+    </div>
+    
+    <div id="status-area">
+        <div id="status-message"></div>
+        <div class="progress-container">
+            <div id="progress-bar" class="progress-bar"></div>
+        </div>
+        <div id="progress-text"></div>
+        <div id="log-area"></div>
+    </div>
+</div>
+
+<script>
+    const form = document.getElementById('upload-form');
+    const fileInput = document.getElementById('excel_file');
+    const submitButton = document.getElementById('submit-button');
+    const fileNameDisplay = document.getElementById('file-name');
+    const statusArea = document.getElementById('status-area');
+    const statusMessage = document.getElementById('status-message');
+    const progressBar = document.getElementById('progress-bar');
+    const progressText = document.getElementById('progress-text');
+    const logArea = document.getElementById('log-area');
+    
+    let statusIntervalId;
+    let logIntervalId;
+    let currentJobId = null;
+
+    fileInput.addEventListener('change', () => {
+        if (fileInput.files.length > 0) {
+            fileNameDisplay.textContent = fileInput.files[0].name;
+            submitButton.disabled = false;
+        } else {
+            fileNameDisplay.textContent = 'ยังไม่ได้เลือกไฟล์';
+            submitButton.disabled = true;
+        }
+        statusArea.style.display = 'none';
+        logArea.innerHTML = '';
+        clearIntervals();
+    });
+
+    form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        
+        const file = fileInput.files[0];
+        if (!file) {
+            alert('กรุณาเลือกไฟล์ Excel ก่อน');
+            return;
+        }
+
+        submitButton.disabled = true;
+        
+        statusArea.style.display = 'block';
+        statusMessage.innerHTML = 'กำลังอัปโหลดและเริ่มประมวลผล...';
+        progressBar.style.width = '0%';
+        progressBar.textContent = '';
+        progressText.textContent = '';
+        logArea.innerHTML = '';
+        clearIntervals();
+
+        const formData = new FormData();
+        formData.append('excel_file', file);
+
+        try {
+            const response = await fetch('/generate_report', {
+                method: 'POST',
+                body: formData
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Server returned an error');
+            }
+
+            const data = await response.json();
+            currentJobId = data.job_id;
+
+            statusMessage.innerHTML = `การประมวลผลสำหรับไฟล์ <b>${file.name}</b> เริ่มต้นขึ้นแล้ว...`;
+
+            statusIntervalId = setInterval(fetchStatus, 1000);
+            logIntervalId = setInterval(fetchLogs, 500);
+
+        } catch (error) {
+            statusMessage.innerHTML = `❌ เกิดข้อผิดพลาดในการเชื่อมต่อ: ${error.message}`;
+            progressBar.style.width = '0%';
+            progressBar.textContent = '';
+            progressText.textContent = '';
+            submitButton.disabled = false;
+            clearIntervals();
+        }
+    });
+
+    function clearIntervals() {
+        if (statusIntervalId) {
+            clearInterval(statusIntervalId);
+            statusIntervalId = null;
+        }
+        if (logIntervalId) {
+            clearInterval(logIntervalId);
+            logIntervalId = null;
+        }
+    }
+
+    async function fetchStatus() {
+        if (!currentJobId) return;
+
+        try {
+            const statusResponse = await fetch(`/status/${currentJobId}`);
+            const statusData = await statusResponse.json();
+
+            if (statusData.error) {
+                statusMessage.innerHTML = `❌ เกิดข้อผิดพลาด: ${statusData.error}`;
+                progressBar.style.width = '0%';
+                progressBar.textContent = '';
+                progressText.textContent = '';
+                clearIntervals();
+                submitButton.disabled = false;
+                return;
+            }
+
+            if (statusData.canceled) {
+                statusMessage.innerHTML = '⛔ การประมวลผลถูกยกเลิกแล้ว';
+                progressBar.style.width = '0%';
+                progressBar.textContent = '';
+                progressText.textContent = '';
+                clearIntervals();
+                submitButton.disabled = false;
+                return;
+            }
+
+            if (statusData.total > 0) {
+                const processed = statusData.processed;
+                const total = statusData.total;
+                const percentage = (processed / total) * 100;
+                
+                progressBar.style.width = `${percentage}%`;
+                progressBar.textContent = `${Math.round(percentage)}%`;
+                progressText.textContent = `ประมวลผลแล้ว ${processed} จาก ${total} รายการ`;
+
+                if (statusData.completed) {
+                    statusMessage.innerHTML = '✅ Exportเสร็จสมบูรณ์!';
+                    clearIntervals(); // หยุดการอัปเดตสถานะและ log แบบเป็นช่วงเวลา
+
+                    // เรียก fetchLogs() อีกครั้งเป็นครั้งสุดท้าย เพื่อให้แน่ใจว่าได้ log ล่าสุดมาทั้งหมด
+                    await fetchLogs();
+
+                    submitButton.disabled = false;
+
+                    // สร้างและเพิ่มสรุปผลลงใน log-area
+                    const createLogEntry = (message, className) => {
+                        const logEntry = document.createElement('div');
+                        logEntry.textContent = message;
+                        logEntry.classList.add(className);
+                        logArea.appendChild(logEntry);
+                    };
+
+                    if (statusData.total > 0) {
+                        if (statusData.zip_file_path) {
+                            window.location.href = `/download_report/${currentJobId}`;
+                        } else {
+                            statusMessage.innerHTML += '<br><span style="color:red; font-size:0.9em;">ไม่สามารถสร้างไฟล์ ZIP ได้ โปรดตรวจสอบ Log หรือ Terminal</span>';
+                        }
+                        
+                        let csvSuccessCount = 0;
+                        let csvFailedFiles = [];
+                        let pdfSuccessCount = 0;
+                        let pdfFailedFiles = [];
+                        let skipCount = 0;
+                        
+                        if (statusData.results && statusData.results.length > 0) {
+                            statusData.results.forEach(result => {
+                                if (result.error_message === "ข้อมูล NodeID หรือ Interface ID ไม่สมบูรณ์") {
+                                    skipCount++;
+                                } else {
+                                    if (result.csv_success) {
+                                        csvSuccessCount++;
+                                    } else {
+                                        const identifier = (result.node_name && result.node_name.includes('_') && result.node_name.split('_').length >= 3) ? 
+                                            `(${result.node_name.split('_').slice(-2).join('/')})` : 
+                                            '';
+                                        csvFailedFiles.push(`${result.node_name || 'ไม่ระบุชื่อ'} ${identifier}`);
+                                    }
+                                    if (result.pdf_success) {
+                                        pdfSuccessCount++;
+                                    } else {
+                                        const identifier = (result.node_name && result.node_name.includes('_') && result.node_name.split('_').length >= 3) ? 
+                                            `(${result.node_name.split('_').slice(-2).join('/')})` : 
+                                            '';
+                                        pdfFailedFiles.push(`${result.node_name || 'ไม่ระบุชื่อ'} ${identifier}`);
+                                    }
+                                }
+                            });
+                        }
+                        
+                        createLogEntry('✨ สรุปผลการ Export', 'log-info');
+                        createLogEntry(`✔ CSV: Export สำเร็จ ${csvSuccessCount} ไฟล์`, 'log-success');
+                        createLogEntry(`✔ PDF: Export สำเร็จ ${pdfSuccessCount} ไฟล์`, 'log-success');
+                        
+                        if (skipCount > 0) {
+                            createLogEntry(`⚠ ข้ามการประมวลผล: ${skipCount} รายการ (NodeID/Interface ID ไม่สมบูรณ์)`, 'log-warning');
+                        }
+
+                        if (csvFailedFiles.length > 0) {
+                            createLogEntry(`✘ CSV: Export ไม่สำเร็จ ${csvFailedFiles.length} ไฟล์`, 'log-error');
+                            csvFailedFiles.forEach(fileName => {
+                                createLogEntry(`- ${fileName}`, 'log-error');
+                            });
+                        }
+
+                        if (pdfFailedFiles.length > 0) {
+                            createLogEntry(`✘ PDF: Export ไม่สำเร็จ ${pdfFailedFiles.length} ไฟล์`, 'log-error');
+                            pdfFailedFiles.forEach(fileName => {
+                                createLogEntry(`- ${fileName}`, 'log-error');
+                            });
+                        }
+                    } else {
+                        createLogEntry('⚠ การประมวลผลเสร็จสิ้น แต่ไม่พบข้อมูลที่ต้อง Export จากไฟล์ Excel', 'log-warning');
+                    }
+                    
+                    logArea.scrollTop = logArea.scrollHeight; // เลื่อนไปด้านล่างสุด
+                }
+            }
+        } catch (error) {
+            console.error("Error fetching status:", error);
+            statusMessage.innerHTML = `❌ ข้อผิดพลาดในการอัปเดตสถานะ: ${error.message}`;
+            clearIntervals();
+            submitButton.disabled = false;
+        }
+    }
+
+    async function fetchLogs() {
+        if (!currentJobId) return;
+        try {
+            const logResponse = await fetch(`/logs/${currentJobId}`);
+            const logData = await logResponse.json();
+            if (logData.logs && logData.logs.length > 0) {
+                const existingLogMessages = new Set(Array.from(logArea.children).map(div => div.textContent));
+
+                logData.logs.forEach(log => {
+                    if (!existingLogMessages.has(log)) {
+                        const logEntry = document.createElement('div');
+                        logEntry.textContent = log; 
+
+                        if (log.startsWith('✅')) {
+                            logEntry.classList.add('log-success');
+                        } else if (log.startsWith('❌')) {
+                            logEntry.classList.add('log-error');
+                        } else if (log.startsWith('⚠️') || log.startsWith('⛔')) {
+                            logEntry.classList.add('log-warning');
+                        } else if (log.startsWith('📊') || log.startsWith('▶') || log.startsWith('📂') || log.startsWith('📥') || log.startsWith('🗑️') || log.startsWith('🧹') || log.startsWith('✨') || log.startsWith('📁')) {
+                            logEntry.classList.add('log-info');
+                        } else {
+                            logEntry.classList.add('log-info');
+                        }
+                        
+                        logArea.appendChild(logEntry);
+                        existingLogMessages.add(log);
+                    }
+                });
+                logArea.scrollTop = logArea.scrollHeight;
+            }
+        } catch (error) {
+            console.error("Error fetching logs:", error);
+        }
+    }
+</script>
+
+</body>
+</html>
