@@ -495,23 +495,9 @@
                         };
                         
                         if (statusData.total > 0) {
-                            if (statusData.csv_file_path) {
-                            if (statusData.csv_file_path) {
-                                // สร้าง URL สำหรับดาวน์โหลดไฟล์ Excel (CSV)
-                                const downloadExcelUrl = `/download_converted_excel/${currentJobId}`;
-                                // กำหนด URL นี้ให้กับปุ่มดาวน์โหลดไฟล์ Excel
-                                // สมมติว่าปุ่มของคุณมี id="downloadExcelBtn"
-                                const downloadExcelBtn = document.getElementById('downloadExcelBtn');
-                                if (downloadExcelBtn) {
-                                    downloadExcelBtn.href = downloadExcelUrl;
-                                    downloadExcelBtn.style.display = 'block'; // แสดงปุ่มเมื่อพร้อมดาวน์โหลด
-                                }
-
-                                // ถ้ามีไฟล์ zip ที่ดาวน์โหลดได้
-                                if (statusData.zip_file_path) {
-                                    window.location.href = `/download_report/${currentJobId}`; // หรือคุณอาจเปลี่ยนเป็นปุ่มดาวน์โหลด
-                                }
-                            } else
+                            if (statusData.zip_file_path) {
+                                window.location.href = `/download_report/${currentJobId}`;
+                            } else {
                                 statusMessage.innerHTML += '<br><span style="color:red; font-size:0.9em;">ไม่สามารถสร้างไฟล์ ZIP ได้ โปรดตรวจสอบ Log หรือ Terminal</span>';
                             }
                             
