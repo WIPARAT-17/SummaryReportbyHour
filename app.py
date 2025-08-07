@@ -830,7 +830,7 @@ def process_file_in_background(file_stream, job_id):
         if not processing_status[job_id].get('canceled'):
             # กำหนดชื่อไฟล์สำหรับดาวน์โหลด
             today_date = datetime.datetime.now().strftime('%Y%m%d')
-            download_name = f"{today_date}CustomerReportbyHour.zip" # แก้ไขการตั้งชื่อไฟล์
+            download_name = f"{today_date}_SummaryReportbyHour.zip" # แก้ไขการตั้งชื่อไฟล์
             zip_filename_path = os.path.join(temp_dir, download_name)
 
             if temp_dir and os.path.exists(temp_dir):
