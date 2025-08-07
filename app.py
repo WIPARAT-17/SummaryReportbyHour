@@ -10,7 +10,7 @@ import datetime
 import os
 import argparse
 import pandas as pd
-from flask import Flask, request, render_template, jsonify, send_from_directory
+from flask import Flask, request, render_template, jsonify, send_from_directory, send_file, send_from_directory
 import tempfile
 import threading
 import uuid
@@ -47,6 +47,9 @@ log_queue = Queue()
 # ตั้งค่า logger สำหรับการบันทึกข้อความ (เช่น INFO, WARNING, ERROR)
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO) # กำหนดระดับ log ขั้นต่ำที่จะแสดง
+
+UPLOAD_FOLDER = 'uploads'
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 # ล้าง handler เก่าที่อาจมีอยู่ เพื่อป้องกัน log ซ้ำ
 if logger.handlers:
@@ -825,7 +828,7 @@ def process_file_in_background(file_stream, job_id):
 
         # หากงานไม่ถูกยกเลิกหลังจากประมวลผลทุกแถวแล้ว ให้สร้างไฟล์ ZIP
         if not processing_status[job_id].get('canceled'):
-            zip_filename = f"customer_reports_{job_id}_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}.zip"
+            zip_filename = f"{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
             zip_file_path = os.path.join(tempfile.gettempdir(), zip_filename) # เก็บไฟล์ ZIP ใน temp directory ของระบบ
 
             if temp_dir and os.path.exists(temp_dir):
@@ -954,7 +957,53 @@ def cancel_job(job_id):
             logger.warning(f"⚠️ พยายามยกเลิกงานที่ไม่พบ")
             return jsonify({"error": "Job not found"}), 404
 
-@app.route('/download_report/<job_id>')
+@app.route('/')
+def index():
+    return render_template('index.html')
+
+@app.route('/download_converted_excel')
+def download_converted_excel():
+    """
+    อ่านไฟล์ Excel ตัวอย่างที่อัปโหลดมา และส่งให้ผู้ใช้
+    """
+    try:
+        # ชื่อไฟล์และพาธที่ถูกต้องของไฟล์ที่อัปโหลด
+        excel_file_name = 'Sample Excel File.xlsx'
+        excel_path = os.path.join(app.config['UPLOAD_FOLDER'], excel_file_name)
+
+        # ตรวจสอบว่าไฟล์มีอยู่จริงหรือไม่
+        if not os.path.exists(excel_path):
+            # หากไฟล์ไม่อยู่ในตำแหน่ง ให้ลองใช้ชื่อไฟล์อื่น
+            csv_file_name = 'Sample Excel File.xlsx - Sheet1.csv'
+            csv_path = os.path.join(app.config['UPLOAD_FOLDER'], csv_file_name)
+
+            if not os.path.exists(csv_path):
+                return "ไม่พบไฟล์ตัวอย่าง", 404
+
+            # อ่านไฟล์ CSV และส่งกลับเป็น Excel
+            df = pd.read_csv(csv_path)
+            output = io.BytesIO()
+            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                df.to_excel(writer, index=False, sheet_name='Sheet1')
+            output.seek(0)
+
+            return send_file(
+                output,
+                mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                as_attachment=True,
+                download_name='Sample Excel File.xlsx'
+            )
+        else:
+            # หากไฟล์ Excel มีอยู่จริง ให้ส่งไฟล์นั้นโดยตรง
+            return send_from_directory(
+                app.config['UPLOAD_FOLDER'],
+                excel_file_name,
+                as_attachment=True
+            )
+
+    except Exception as e:
+        return f"เกิดข้อผิดพลาดในการดาวน์โหลดไฟล์: {e}", 500
+
 @app.route('/download_report/<job_id>')
 def download_report(job_id):
     """
