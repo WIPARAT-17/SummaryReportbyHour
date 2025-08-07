@@ -1007,53 +1007,6 @@ def download_report(job_id):
         logger.error(f"❌ ไม่พบไฟล์ ZIP หรือยังสร้างไม่เสร็จ. Path: {status_entry.get('zip_file_path')}")
         return jsonify({"error": "File not found or report not completed."}), 404
 
-    try:
-        directory = tempfile.gettempdir() # Directory ที่เก็บไฟล์ ZIP
-        filename = os.path.basename(zip_file_path) # ชื่อไฟล์ ZIP (เช่น "customer_reports_JOBID_YYYYMMDDHHMMSS.zip")
-        logger.info(f"📥 กำลังส่งไฟล์ ZIP: {filename}")
-
-        # --- ส่วนที่แก้ไขเพื่อสร้าง download_name แบบมีวันที่ ---
-        download_name_final = "Customer Report by Hour.zip" # ชื่อเริ่มต้น fallback
-
-        try:
-            # คาดว่าชื่อไฟล์ ZIP จะอยู่ในรูปแบบ "customer_reports_{job_id}_{YYYYMMDDHHMMSS}.zip"
-            # แยกชื่อไฟล์ออกจากนามสกุล
-            file_base, file_ext = os.path.splitext(filename)
-            # แยกส่วน timestamp ออกจากชื่อไฟล์ (คือส่วนสุดท้ายหลัง '_')
-            parts = file_base.rsplit('_', 1)
-            
-            if len(parts) == 2 and len(parts[1]) == 14: # ตรวจสอบว่าเป็น YYYYMMDDHHMMSS 14 ตัวอักษร
-                timestamp_str = parts[1]
-                # แปลง timestamp string เป็น datetime object
-                report_datetime = datetime.datetime.strptime(timestamp_str, '%Y%m%d%H%M%S')
-                # จัดรูปแบบวันที่เป็น YYYY-MM-DD
-                formatted_date = report_datetime.strftime('%Y-%m-%d')
-                # สร้างชื่อไฟล์สำหรับดาวน์โหลดใหม่
-                download_name_final = f"CustomerReport(Hourly)_{formatted_date}.zip"
-            else:
-                logger.warning(f"⚠️ ไม่สามารถแยก timestamp จากชื่อไฟล์ ZIP ได้: {filename}. จะใช้ชื่อไฟล์ดาวน์โหลดเริ่มต้น.")
-        except ValueError:
-            logger.warning(f"⚠️ รูปแบบ timestamp ในชื่อไฟล์ ZIP ไม่ถูกต้อง: {filename}. จะใช้ชื่อไฟล์ดาวน์โหลดเริ่มต้น.")
-        except Exception as e:
-            logger.error(f"❌ เกิดข้อผิดพลาดในการสร้าง download_name: {e}. จะใช้ชื่อไฟล์ดาวน์โหลดเริ่มต้น.")
-        # --- จบส่วนที่แก้ไข ---
-
-        # ส่งไฟล์ให้ Client สำหรับดาวน์โหลด
-        response = send_from_directory(
-            directory=directory,
-            path=filename,
-            as_attachment=True,
-            mimetype='application/zip',
-            download_name=download_name_final # ใช้ชื่อไฟล์ที่ Client จะดาวน์โหลดไป
-        )
-
-        return response
-
-    except Exception as e:
-        logger.critical(f"❌ ข้อผิดพลาดร้ายแรงในการส่งไฟล์ ZIP: {e}")
-        return jsonify({"error": f"Failed to serve file: {e}"}), 500
-
-
 def cleanup_old_jobs():
     """
     ฟังก์ชันสำหรับลบสถานะงานและไฟล์ ZIP เก่าๆ ออกจากระบบ
@@ -1107,3 +1060,4 @@ if __name__ == '__main__':
     # รัน Flask application
     # debug=True จะทำให้ Server รีโหลดอัตโนมัติเมื่อโค้ดเปลี่ยน และแสดง traceback ที่ละเอียดขึ้น
     app.run(debug=True,host= '0.0.0.0',port=5050)
+
