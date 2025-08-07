@@ -828,31 +828,33 @@ def process_file_in_background(file_stream, job_id):
 
         # หากงานไม่ถูกยกเลิกหลังจากประมวลผลทุกแถวแล้ว ให้สร้างไฟล์ ZIP
         if not processing_status[job_id].get('canceled'):
-            today_date = datetime.datetime.now().strftime('%Y%m%d')
-            download_name = f"{today_date}Customer Report by Hour.zip"
+            # กำหนดชื่อไฟล์สำหรับดาวน์โหลด
+            today_date = datetime.datetime.now().strftime('%Y-%m-%d')
+            download_name = f"{today_date}CustomerReportbyHour.zip" # แก้ไขการตั้งชื่อไฟล์
             zip_filename_path = os.path.join(temp_dir, download_name)
 
             if temp_dir and os.path.exists(temp_dir):
                 # สร้างไฟล์ ZIP จากเนื้อหาในโฟลเดอร์ชั่วคราว (CSV และ PDF)
-                with zipfile.ZipFile( zip_filename_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                with zipfile.ZipFile(zip_filename_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
                     for root, _, files in os.walk(temp_dir):
                         for file in files:
                             file_path = os.path.join(root, file)
-                            # กำหนดชื่อไฟล์ใน ZIP ให้สัมพันธ์กับโครงสร้างภายใน temp_dir
-                            arcname = os.path.relpath(file_path, temp_dir)
-                            zipf.write(file_path, arcname)
+                            # เพิ่มเงื่อนไขเพื่อไม่ให้บีบอัดไฟล์ ZIP ที่กำลังสร้างอยู่
+                            if file_path != zip_filename_path: 
+                                arcname = os.path.relpath(file_path, temp_dir)
+                                zipf.write(file_path, arcname)
 
                 with status_lock:
                     status = processing_status.get(job_id)
                     if status:
                         status['zip_file_path'] = zip_filename_path
-                        status['download_name'] = download_name  # เพิ่ม Key 'download_name' ที่นี่
+                        status['download_name'] = download_name  # อัปเดตชื่อไฟล์สำหรับดาวน์โหลด
                         status['completed'] = True
                     else:
                         logger.error(f"Job {job_id} not found in status list.")
                         return False, "Job not found"
 
-                return True, "Report(s) created and zipped successfully."
+                return True, "รายงานสร้างและบีบอัดสำเร็จแล้ว"
 
     except Exception as e:
         # ดักจับข้อผิดพลาดระดับสูงที่เกิดขึ้นใน process_file_in_background ทั้งหมด
@@ -860,6 +862,7 @@ def process_file_in_background(file_stream, job_id):
             processing_status[job_id]['error'] = f"เกิดข้อผิดพลาดในระหว่างการประมวลผลเบื้องหลัง: {e}"
             processing_status[job_id]['completed'] = True
         logger.critical(f"❌ {processing_status[job_id]['error']}")
+
     finally:
         # แก้ไขให้ลบเฉพาะโฟลเดอร์ย่อย
         # เพื่อเก็บไฟล์ ZIP ที่อยู่ในโฟลเดอร์หลักไว้
