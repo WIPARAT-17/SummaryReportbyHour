@@ -828,12 +828,13 @@ def process_file_in_background(file_stream, job_id):
 
         # หากงานไม่ถูกยกเลิกหลังจากประมวลผลทุกแถวแล้ว ให้สร้างไฟล์ ZIP
         if not processing_status[job_id].get('canceled'):
-            zip_filename = f"{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
-            zip_file_path = os.path.join(tempfile.gettempdir(), zip_filename) # เก็บไฟล์ ZIP ใน temp directory ของระบบ
+            today_date = datetime.datetime.now().strftime('%Y%m%d')
+            download_name = f"{today_date}Customer Report by Hour.zip"
+            zip_filename_path = os.path.join(temp_dir, download_name)
 
             if temp_dir and os.path.exists(temp_dir):
                 # สร้างไฟล์ ZIP จากเนื้อหาในโฟลเดอร์ชั่วคราว (CSV และ PDF)
-                with zipfile.ZipFile(zip_file_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                with zipfile.ZipFile( zip_filename_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
                     for root, _, files in os.walk(temp_dir):
                         for file in files:
                             file_path = os.path.join(root, file)
@@ -842,19 +843,16 @@ def process_file_in_background(file_stream, job_id):
                             zipf.write(file_path, arcname)
 
                 with status_lock:
-                    processing_status[job_id]['zip_file_path'] = zip_file_path # เก็บ path ของไฟล์ ZIP
-                    processing_status[job_id]['completed'] = True # ตั้งสถานะว่างานเสร็จสมบูรณ์
-                logger.info(f"✅ การสร้างรายงานเสร็จสมบูรณ์!")
-            else:
-                with status_lock:
-                    processing_status[job_id]['error'] = "ไม่พบโฟลเดอร์ชั่วคราวสำหรับสร้าง ZIP"
-                    processing_status[job_id]['completed'] = True
-                logger.error(f"❌ ไม่พบโฟลเดอร์ชั่วคราว '{temp_dir}' ไม่สามารถสร้าง ZIP ได้")
-        else:
-            # ถ้างานถูกยกเลิก
-            with status_lock:
-                 processing_status[job_id]['completed'] = True
-                 processing_status[job_id]['error'] = "การประมวลผลถูกยกเลิก"
+                    status = processing_status.get(job_id)
+                    if status:
+                        status['zip_file_path'] = zip_filename_path
+                        status['download_name'] = download_name  # เพิ่ม Key 'download_name' ที่นี่
+                        status['completed'] = True
+                    else:
+                        logger.error(f"Job {job_id} not found in status list.")
+                        return False, "Job not found"
+
+                return True, "Report(s) created and zipped successfully."
 
     except Exception as e:
         # ดักจับข้อผิดพลาดระดับสูงที่เกิดขึ้นใน process_file_in_background ทั้งหมด
@@ -863,14 +861,12 @@ def process_file_in_background(file_stream, job_id):
             processing_status[job_id]['completed'] = True
         logger.critical(f"❌ {processing_status[job_id]['error']}")
     finally:
-        # ไม่ว่าจะเกิดอะไรขึ้น ให้พยายามลบโฟลเดอร์ชั่วคราว
-        if temp_dir and os.path.exists(temp_dir):
-            try:
-                shutil.rmtree(temp_dir, ignore_errors=True) # ลบโฟลเดอร์และไฟล์ทั้งหมดในนั้น
-                # ข้อความนี้จะถูกกรองโดย QueueHandler แล้ว (จะไม่แสดงใน UI)
-                logger.info(f"📁 ลบโฟลเดอร์ CSV/PDF ชั่วคราว: {temp_dir.split(os.sep)[-1]} แล้ว (ไม่รวมไฟล์ ZIP)")
-            except Exception as e:
-                logger.error(f"❌ ข้อผิดพลาดในการลบโฟลเดอร์ CSV/PDF ชั่วคราว: {e}")
+        # แก้ไขให้ลบเฉพาะโฟลเดอร์ย่อย
+        # เพื่อเก็บไฟล์ ZIP ที่อยู่ในโฟลเดอร์หลักไว้
+        if csv_root_dir and os.path.exists(csv_root_dir):
+            shutil.rmtree(csv_root_dir, ignore_errors=True)
+        if pdf_root_dir and os.path.exists(pdf_root_dir):
+            shutil.rmtree(pdf_root_dir, ignore_errors=True)
 
 # --- Flask Routes ---
 @app.route('/')
@@ -989,21 +985,24 @@ def download_report(job_id):
     ให้ผู้ใช้ดาวน์โหลดไฟล์ ZIP ที่สร้างขึ้นเมื่อการประมวลผลเสร็จสมบูรณ์
     """
     with status_lock:
-        job_info = processing_status.get(job_id)
+        status_entry = processing_status.get(job_id)
 
-    if not job_info:
-        logger.error(f"❌ ไม่พบข้อมูลงานสำหรับดาวน์โหลด")
-        return jsonify({"error": "Job not found or not ready for download. It might be too old or cancelled."}), 404
+    if status_entry and status_entry['completed'] and status_entry['zip_file_path']:
+        # แยกพาธของโฟลเดอร์และชื่อไฟล์ออกจากกัน
+        temp_dir = os.path.dirname(status_entry['zip_file_path'])
+        zip_filename = os.path.basename(status_entry['zip_file_path'])
+        download_name_final = status_entry['download_name']
 
-    zip_file_path = job_info.get('zip_file_path')
-
-    # ตรวจสอบว่ามี path ไฟล์ ZIP และไฟล์มีอยู่จริงหรือไม่
-    if not zip_file_path or not os.path.exists(zip_file_path):
-        logger.error(f"❌ ไม่พบไฟล์ ZIP หรือยังสร้างไม่เสร็จ. Path: {zip_file_path}")
-        if job_info.get('completed') and not zip_file_path:
-            # ถ้างานเสร็จแล้วแต่ไม่มี path ไฟล์ ZIP แสดงว่ามี internal error
-            return jsonify({"error": "Report completed with no ZIP file generated (internal error)"}), 500
-        return jsonify({"error": "Report not yet generated or file not found"}), 404
+        # ใช้ send_from_directory อย่างถูกต้อง
+        return send_from_directory(
+            directory=temp_dir,         # ส่งพาธของโฟลเดอร์ชั่วคราว
+            path=zip_filename,          # ส่งแค่ชื่อไฟล์
+            as_attachment=True,
+            download_name=download_name_final # ใช้ชื่อไฟล์ที่จัดรูปแบบแล้วสำหรับการดาวน์โหลด
+        )
+    else:
+        logger.error(f"❌ ไม่พบไฟล์ ZIP หรือยังสร้างไม่เสร็จ. Path: {status_entry.get('zip_file_path')}")
+        return jsonify({"error": "File not found or report not completed."}), 404
 
     try:
         directory = tempfile.gettempdir() # Directory ที่เก็บไฟล์ ZIP
