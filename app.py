@@ -961,48 +961,27 @@ def cancel_job(job_id):
 def index():
     return render_template('index.html')
 
-@app.route('/download_converted_excel')
-def download_converted_excel():
+@app.route('/download_converted_excel/<job_id>')
+def download_converted_excel(job_id):
     """
-    อ่านไฟล์ Excel ตัวอย่างที่อัปโหลดมา และส่งให้ผู้ใช้
+    จัดการการดาวน์โหลดไฟล์ Excel (CSV) ที่ถูกแปลงแล้ว
     """
+    with status_lock:
+        status = processing_status.get(job_id)
+        if not status:
+            return jsonify({'error': 'Job ID not found'}), 404
+
+        csv_file_path = status['csv_file_path']
+        if not csv_file_path or not os.path.exists(csv_file_path):
+            return jsonify({'error': 'File not found'}), 404
+
     try:
-        # ชื่อไฟล์และพาธที่ถูกต้องของไฟล์ที่อัปโหลด
-        excel_file_name = 'Sample Excel File.xlsx'
-        excel_path = os.path.join(app.config['UPLOAD_FOLDER'], excel_file_name)
-
-        # ตรวจสอบว่าไฟล์มีอยู่จริงหรือไม่
-        if not os.path.exists(excel_path):
-            # หากไฟล์ไม่อยู่ในตำแหน่ง ให้ลองใช้ชื่อไฟล์อื่น
-            csv_file_name = 'Sample Excel File.xlsx - Sheet1.csv'
-            csv_path = os.path.join(app.config['UPLOAD_FOLDER'], csv_file_name)
-
-            if not os.path.exists(csv_path):
-                return "ไม่พบไฟล์ตัวอย่าง", 404
-
-            # อ่านไฟล์ CSV และส่งกลับเป็น Excel
-            df = pd.read_csv(csv_path)
-            output = io.BytesIO()
-            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                df.to_excel(writer, index=False, sheet_name='Sheet1')
-            output.seek(0)
-
-            return send_file(
-                output,
-                mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                as_attachment=True,
-                download_name='Sample Excel File.xlsx'
-            )
-        else:
-            # หากไฟล์ Excel มีอยู่จริง ให้ส่งไฟล์นั้นโดยตรง
-            return send_from_directory(
-                app.config['UPLOAD_FOLDER'],
-                excel_file_name,
-                as_attachment=True
-            )
-
+        # ดึงชื่อไฟล์จาก path เพื่อใช้เป็นชื่อไฟล์สำหรับดาวน์โหลด
+        filename = os.path.basename(csv_file_path)
+        return send_file(csv_file_path, as_attachment=True, download_name=filename)
     except Exception as e:
-        return f"เกิดข้อผิดพลาดในการดาวน์โหลดไฟล์: {e}", 500
+        logger.error(f"Error downloading file for job {job_id}: {e}")
+        return jsonify({'error': 'An error occurred during file download'}), 500
 
 @app.route('/download_report/<job_id>')
 def download_report(job_id):
