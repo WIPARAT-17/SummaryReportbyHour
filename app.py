@@ -141,7 +141,7 @@ def get_data_from_api(nod_id, itf_id, job_id):
 
     try:
         # ส่ง POST Request ไปยัง API ด้วยข้อมูล SOAP Body และ Headers
-        resp = requests.post(url, data=body, headers=headers, timeout=10)
+        resp = requests.post(url, data=body, headers=headers, timeout=100)
         resp.raise_for_status() # ตรวจสอบว่า Request สำเร็จหรือไม่ (HTTP 2xx)
 
         # ค้นหา XML Response ที่ถูกต้องภายในข้อความตอบกลับ
@@ -196,6 +196,7 @@ def process_json_data(raw_json_data, job_id, excel_node_id, excel_agency_name):
         - processed_data (list): ข้อมูลที่ประมวลผลแล้วพร้อมสำหรับตาราง (รวม 24 ชั่วโมง)
         - grand_total_row (dict): แถว Grand Total (Average)
     """
+    # Mapping ระหว่างชื่อคอลัมน์ภาษาไทยกับ Key ใน JSON จาก API
     column_mapping = {
         "รหัสหน่วยงาน": "Customer_Curcuit_ID",
         "ชื่อหน่วยงาน": "Address",
@@ -204,49 +205,60 @@ def process_json_data(raw_json_data, job_id, excel_node_id, excel_agency_name):
         "In_Averagebps": "In_Averagebps",
         "Out_Averagebps": "Out_Averagebps"
     }
-    desired_headers_th = list(column_mapping.keys())
+    desired_headers_th = list(column_mapping.keys()) # หัวข้อคอลัมน์ภาษาไทยที่ต้องการ
 
-    # ตรวจสอบและจัดการข้อมูลที่เป็น None หรือ list ว่างตั้งแต่แรก
-    if raw_json_data is None or (isinstance(raw_json_data, list) and not raw_json_data):
-        logger.warning(f"ไม่มีข้อมูล JSON ให้ประมวลผลสำหรับ Job {job_id}")
-        return desired_headers_th, [], {}
-    
-    # ลบโค้ดที่ซ้ำซ้อน
+    # ตรวจสอบว่าข้อมูลดิบเป็น list หรือ dict แล้วแปลงให้เป็น list เสมอ เพื่อให้ประมวลผลได้ง่าย
     data_to_process = raw_json_data if isinstance(raw_json_data, list) else [raw_json_data]
-    
-    # กำหนดค่าเริ่มต้นสำหรับข้อมูลหลักจาก Excel
-    api_customer_circuit_id = excel_node_id
-    address_to_use = excel_agency_name
-    bandwidth_to_use = ''
 
-    first_item = data_to_process[0]
-    
-    # ดึงข้อมูลจากรายการแรกของ API และใช้เป็นค่าเริ่มต้น
-    api_customer_circuit_id = first_item.get(column_mapping["รหัสหน่วยงาน"]) or excel_node_id
-    api_address = first_item.get(column_mapping["ชื่อหน่วยงาน"]) or excel_agency_name
-    bandwidth_raw_from_api = first_item.get(column_mapping["ขนาดBandwidth (หน่วย Mbps)"]) or ''
+    if not data_to_process:
+        logger.warning(f"ไม่มีข้อมูล JSON ให้ประมวลผล")
+        return desired_headers_th, [], {}
 
-    # ประมวลผล Bandwidth เพื่อให้แสดงผลในรูปแบบที่ต้องการ
+    # กำหนดค่าเริ่มต้นสำหรับข้อมูลหลัก (รหัสหน่วยงาน, ชื่อหน่วยงาน, Bandwidth)
+    # ค่าเหล่านี้จะถูกใช้เป็นค่าตั้งต้นสำหรับหัวเรื่องใน PDF และถูกเติมลงในแต่ละแถวข้อมูล
+    # หากข้อมูลจาก API ไม่มีค่าเหล่านี้
+    # customer_circuit_id_to_use = excel_node_id # เริ่มต้นใช้จาก Excel - แต่ในโค้ดจริง ใช้ api_customer_circuit_id ซึ่งได้จาก first_item.get() หากมี
+    address_to_use = excel_agency_name # เริ่มต้นใช้จาก Excel
+    bandwidth_to_use = '' # ค่าเริ่มต้นว่างเปล่า จะถูกคำนวณจาก API หรือใช้ raw
+
+    first_item = data_to_process[0] # ดึงข้อมูลแถวแรกมาเพื่อหาค่าเริ่มต้น
+
+    # พยายามดึงข้อมูลจาก API ก่อน หากมีค่า จะใช้ข้อมูลจาก API แทนค่าจาก Excel
+    api_customer_circuit_id = first_item.get(column_mapping["รหัสหน่วยงาน"], '')
+    api_address = first_item.get(column_mapping["ชื่อหน่วยงาน"], '')
+    bandwidth_raw_from_api = first_item.get(column_mapping["ขนาดBandwidth (หน่วย Mbps)"], '')
+
+    # if api_customer_circuit_id:
+    #     customer_circuit_id_to_use = api_customer_circuit_id # ไม่ได้ถูกใช้โดยตรงในบรรทัดต่อไป แต่ `api_customer_circuit_id` ถูกส่งไปใช้
+    if api_address:
+        address_to_use = api_address
+
+    # ประมวลผล Bandwidth เพื่อให้แสดงผลในรูปแบบที่ต้องการ (เช่น "20 Mbps.")
     if "FTTx" in str(bandwidth_raw_from_api):
         bandwidth_to_use = "20 Mbps."
     else:
         try:
+            # ค้นหาตัวเลขใน string Bandwidth (เช่น "100Mbps")
             numeric_value_match = re.search(r'[\d.]+', str(bandwidth_raw_from_api))
             if numeric_value_match:
                 numeric_value = float(numeric_value_match.group())
-                bandwidth_to_use = f"{int(numeric_value)} Mbps."
+                bandwidth_to_use = f"{int(numeric_value)} Mbps." # แสดงเป็นจำนวนเต็ม
             else:
-                bandwidth_to_use = str(bandwidth_raw_from_api)
+                bandwidth_to_use = str(bandwidth_raw_from_api) # ถ้าไม่พบตัวเลขก็ใช้ raw string
         except (ValueError, TypeError, AttributeError):
-            bandwidth_to_use = str(bandwidth_raw_from_api)
-    
-    # กำหนดช่วงเวลาของรายงาน (เต็มเดือน)
-    min_date_from_api = None
-    max_date_from_api = None
+            bandwidth_to_use = str(bandwidth_raw_from_api) # ถ้าแปลงไม่ได้ก็ใช้ raw string
+
+    # 1. กำหนดช่วงเวลาของรายงาน (เต็มเดือน)
+    min_date_from_api = None # วันที่เริ่มต้นของข้อมูล API
+    max_date_from_api = None # วันที่สิ้นสุดของข้อมูล API
+
     for item in data_to_process:
+        # ตรวจสอบ Timestamp ซึ่งอาจเป็น dict {'date': '...'}.date
         if isinstance(item.get('Timestamp'), dict) and 'date' in item['Timestamp']:
             try:
+                # แปลง Timestamp string เป็น datetime object
                 dt_obj_from_api = datetime.datetime.strptime(item['Timestamp']['date'], '%Y-%m-%d %H:%M:%S.%f')
+                # อัปเดต min_date_from_api และ max_date_from_api
                 if min_date_from_api is None or dt_obj_from_api.date() < min_date_from_api:
                     min_date_from_api = dt_obj_from_api.date()
                 if max_date_from_api is None or dt_obj_from_api.date() > max_date_from_api:
@@ -255,89 +267,98 @@ def process_json_data(raw_json_data, job_id, excel_node_id, excel_agency_name):
                 logger.warning(f"Job {job_id}: ไม่สามารถแปลงวันที่จาก Timestamp ในข้อมูล API ได้: {item.get('Timestamp')}")
                 continue
 
+    # หากไม่มีวันที่ที่ถูกต้องจาก API (เช่น API ไม่คืนข้อมูล Timestamp หรือ format ผิด)
+    # ให้ใช้เดือนปัจจุบันเป็นค่าเริ่มต้นสำหรับช่วงรายงาน
     if min_date_from_api is None or max_date_from_api is None:
         today = datetime.date.today()
+        # คำนวณวันที่ 1 ของเดือนปัจจุบัน
         first_day_of_current_month = today.replace(day=1)
+        
+        # คำนวณวันสุดท้ายของเดือนที่แล้ว
         report_end_date = first_day_of_current_month - datetime.timedelta(days=1)
+        
+        # คำนวณวันที่ 1 ของเดือนที่แล้ว
         report_start_date = report_end_date.replace(day=1)
+        
+        logger.warning(f"ไม่พบ Timestamp ที่ถูกต้องในข้อมูล API, ใช้เดือนที่แล้วเป็นวันอ้างอิง: {report_start_date} ถึง {report_end_date}.")
     else:
-        report_start_date = min_date_from_api.replace(day=1)
+        # ขยายช่วงเวลาให้ครอบคลุมทั้งเดือนที่ข้อมูล API อยู่
+        report_start_date = min_date_from_api.replace(day=1) # วันที่ 1 ของเดือนที่ข้อมูลเริ่มต้น
+        # คำนวณวันสิ้นสุดของเดือนสุดท้ายที่มีข้อมูล
         next_month_start_for_max = (max_date_from_api.replace(day=1) + datetime.timedelta(days=32)).replace(day=1)
-        report_end_date = next_month_start_for_max - datetime.timedelta(days=1)
-    
-    # สร้างโครงสร้างข้อมูลที่สมบูรณ์สำหรับทุกวันและทุกชั่วโมง
-    full_data_structure = {}
+        report_end_date = next_month_start_for_max - datetime.timedelta(days=1) # วันสุดท้ายของเดือนที่ข้อมูลสิ้นสุด
+        logger.info(f"กำหนดช่วงรายงานจากข้อมูล API: {report_start_date} ถึง {report_end_date}.")
+
+    # สร้างโครงสร้างข้อมูลที่สมบูรณ์สำหรับทุกวันและทุกชั่วโมงในช่วงเวลาที่กำหนด
+    # นี่คือการสร้างกรอบเวลา 24 ชั่วโมงต่อวันสำหรับช่วงที่กำหนด
+    full_data_structure = {} # ใช้ dict เพื่อเก็บข้อมูลตามวันที่และเวลาเพื่อความสะดวกในการอัปเดต
     current_date = report_start_date
     while current_date <= report_end_date:
-        for hour in range(24):
+        for hour in range(24): # วนลูปสำหรับ 24 ชั่วโมงในแต่ละวัน
             dt_obj = datetime.datetime.combine(current_date, datetime.time(hour, 0, 0))
-            formatted_date_time = dt_obj.strftime('%Y-%m-%d %H.%M.%S')
-            date_key = current_date.strftime('%Y-%m-%d')
+            formatted_date_time = dt_obj.strftime('%Y-%m-%d %H.%M.%S') # จัดรูปแบบวันที่และเวลา
 
+            date_key = current_date.strftime('%Y-%m-%d')
             if date_key not in full_data_structure:
-                full_data_structure[date_key] = {}
-            
-            # เติมข้อมูล 24 ชั่วโมง โดยใช้ค่าเริ่มต้นที่กำหนดไว้
+                full_data_structure[date_key] = {} # สร้าง dict สำหรับแต่ละวัน
+
+            # เติมข้อมูล 24 ชั่วโมง โดยใช้ค่าเริ่มต้น (รหัสหน่วยงาน, ชื่อหน่วยงาน, Bandwidth จาก Excel/API-แรก)
+            # และกำหนดค่าเริ่มต้นของปริมาณการใช้งานเป็น "0"
             full_data_structure[date_key][formatted_date_time] = {
-                "รหัสหน่วยงาน": api_customer_circuit_id,
-                "ชื่อหน่วยงาน": api_address,
+                "รหัสหน่วยงาน": api_customer_circuit_id, # ใช้ค่าจาก API ที่ดึงมาได้
+                "ชื่อหน่วยงาน": address_to_use,             # ใช้ค่าจาก API ที่ดึงมาได้
                 "วันที่และเวลา": formatted_date_time,
-                "ขนาดBandwidth (หน่วย Mbps)": bandwidth_to_use,
-                "In_Averagebps": "0",
-                "Out_Averagebps": "0",
-                "_raw_incoming": 0,
-                "_raw_outcoming": 0
+                "ขนาดBandwidth (หน่วย Mbps)": bandwidth_to_use, # ใช้ค่า Bandwidth ที่จัดรูปแบบแล้ว
+                "In_Averagebps": "0", # ค่าเริ่มต้นเป็น "0" (string)
+                "Out_Averagebps": "0", # ค่าเริ่มต้นเป็น "0" (string)
+                "_raw_incoming": 0, # เก็บค่าดิบ (int/float) สำหรับคำนวณเฉลี่ยรวม
+                "_raw_outcoming": 0 # เก็บค่าดิบ (int/float) สำหรับคำนวณเฉลี่ยรวม
             }
-        current_date += datetime.timedelta(days=1)
+        current_date += datetime.timedelta(days=1) # เลื่อนไปยังวันถัดไป
 
     # อัปเดตข้อมูลจาก API ทับลงในโครงสร้างที่สร้างไว้
+    # นี่คือขั้นตอนการผสานข้อมูลที่ได้จาก API เข้ากับกรอบเวลา 24 ชั่วโมงที่สร้างไว้
     for item in data_to_process:
         dt_obj_from_api = None
         if isinstance(item.get('Timestamp'), dict) and 'date' in item['Timestamp']:
             try:
                 dt_obj_from_api = datetime.datetime.strptime(item['Timestamp']['date'], '%Y-%m-%d %H:%M:%S.%f')
             except ValueError:
-                continue
+                continue # ข้ามถ้าแปลง Timestamp ไม่ได้
 
         if dt_obj_from_api:
             date_key = dt_obj_from_api.strftime('%Y-%m-%d')
             formatted_time_from_api = dt_obj_from_api.strftime('%Y-%m-%d %H.%M.%S')
 
+            # หาก Timestamp จาก API ตรงกับช่องว่างในโครงสร้างที่สร้างไว้
             if date_key in full_data_structure and formatted_time_from_api in full_data_structure[date_key]:
-                # ✅ แก้ไข: ดึงข้อมูลและตรวจสอบค่า
-                item_customer_id = item.get(column_mapping["รหัสหน่วยงาน"])
-                item_address = item.get(column_mapping["ชื่อหน่วยงาน"])
-                
-                # ✅ แก้ไข: อัปเดตค่าก็ต่อเมื่อข้อมูลใหม่ไม่ใช่ None หรือว่างเปล่า
-                if item_customer_id:
-                    full_data_structure[date_key][formatted_time_from_api]["รหัสหน่วยงาน"] = item_customer_id
-                
-                if item_address:
-                    full_data_structure[date_key][formatted_time_from_api]["ชื่อหน่วยงาน"] = item_address
-                
                 in_avg_bps = item.get('In_Averagebps', '0')
                 out_avg_bps = item.get('Out_Averagebps', '0')
 
                 # แปลงและจัดรูปแบบ In_Averagebps
                 try:
                     in_avg_bps_float = float(in_avg_bps)
-                    full_data_structure[date_key][formatted_time_from_api]["_raw_incoming"] = int(in_avg_bps_float)
-                    full_data_structure[date_key][formatted_time_from_api]["In_Averagebps"] = f"{int(in_avg_bps_float):,}"
+                    full_data_structure[date_key][formatted_time_from_api]["_raw_incoming"] = int(in_avg_bps_float) # เก็บค่าดิบเป็น int
+                    full_data_structure[date_key][formatted_time_from_api]["In_Averagebps"] = f"{int(in_avg_bps_float):,}" # จัดรูปแบบมีคอมม่า
                 except (ValueError, TypeError):
                     full_data_structure[date_key][formatted_time_from_api]["_raw_incoming"] = 0
-                    full_data_structure[date_key][formatted_time_from_api]["In_Averagebps"] = str(in_avg_bps)
+                    full_data_structure[date_key][formatted_time_from_api]["In_Averagebps"] = str(in_avg_bps) # เก็บเป็น string เดิมถ้าแปลงไม่ได้
 
                 # แปลงและจัดรูปแบบ Out_Averagebps
                 try:
                     out_avg_bps_float = float(out_avg_bps)
-                    full_data_structure[date_key][formatted_time_from_api]["_raw_outcoming"] = int(out_avg_bps_float)
-                    full_data_structure[date_key][formatted_time_from_api]["Out_Averagebps"] = f"{int(out_avg_bps_float):,}"
+                    full_data_structure[date_key][formatted_time_from_api]["_raw_outcoming"] = int(out_avg_bps_float) # เก็บค่าดิบเป็น int
+                    full_data_structure[date_key][formatted_time_from_api]["Out_Averagebps"] = f"{int(out_avg_bps_float):,}" # จัดรูปแบบมีคอมม่า
                 except (ValueError, TypeError):
                     full_data_structure[date_key][formatted_time_from_api]["_raw_outcoming"] = 0
-                    full_data_structure[date_key][formatted_time_from_api]["Out_Averagebps"] = str(out_avg_bps)
-                
-                # ประมวลผล Bandwidth จาก item โดยตรง
-                item_bandwidth_raw = item.get(column_mapping["ขนาดBandwidth (หน่วย Mbps)"])
+                    full_data_structure[date_key][formatted_time_from_api]["Out_Averagebps"] = str(out_avg_bps) # เก็บเป็น string เดิมถ้าแปลงไม่ได้
+
+                # อัปเดต "รหัสหน่วยงาน", "ชื่อหน่วยงาน" ด้วยค่าจาก API หากมี (ให้ค่าจาก API มีความสำคัญกว่าค่าเริ่มต้น)
+                full_data_structure[date_key][formatted_time_from_api]["รหัสหน่วยงาน"] = item.get(column_mapping["รหัสหน่วยงาน"], api_customer_circuit_id)
+                full_data_structure[date_key][formatted_time_from_api]["ชื่อหน่วยงาน"] = item.get(column_mapping["ชื่อหน่วยงาน"], address_to_use)
+
+                # ประมวลผล Bandwidth จาก item โดยตรง หากมีค่าจาก API จะใช้ค่านั้น
+                item_bandwidth_raw = item.get(column_mapping["ขนาดBandwidth (หน่วย Mbps)"], '')
                 if item_bandwidth_raw:
                     if "FTTx" in str(item_bandwidth_raw):
                         full_data_structure[date_key][formatted_time_from_api]["ขนาดBandwidth (หน่วย Mbps)"] = "20 Mbps."
@@ -351,74 +372,43 @@ def process_json_data(raw_json_data, job_id, excel_node_id, excel_agency_name):
                                 full_data_structure[date_key][formatted_time_from_api]["ขนาดBandwidth (หน่วย Mbps)"] = str(item_bandwidth_raw)
                         except (ValueError, TypeError, AttributeError):
                             full_data_structure[date_key][formatted_time_from_api]["ขนาดBandwidth (หน่วย Mbps)"] = str(item_bandwidth_raw)
+                else:
+                    # หาก API ไม่มีค่า bandwidth สำหรับ item นี้ ให้ใช้ค่าที่คำนวณไว้ตอนต้น (จาก first_item)
+                    full_data_structure[date_key][formatted_time_from_api]["ขนาดBandwidth (หน่วย Mbps)"] = bandwidth_to_use
 
     # รวบรวมข้อมูลที่ประมวลผลแล้วทั้งหมด และคำนวณ Grand Total
-    processed_data = []
-    total_incoming_sum = 0
-    total_outcoming_sum = 0
-    data_points_count = 0
+    processed_data = [] # List ที่จะเก็บข้อมูลทั้งหมดเพื่อนำไปสร้างตาราง
+    total_incoming_sum = 0 # ผลรวมของ In_Averagebps (ค่าดิบ)
+    total_outcoming_sum = 0 # ผลรวมของ Out_Averagebps (ค่าดิบ)
+    data_points_count = 0 # จำนวนจุดข้อมูลที่ใช้คำนวณ (24 ชั่วโมงต่อวัน x จำนวนวัน)
 
+    # วนลูปผ่านข้อมูลที่จัดโครงสร้างไว้ (เรียงตามวันที่และเวลา)
     for date_key in sorted(full_data_structure.keys()):
         for time_key in sorted(full_data_structure[date_key].keys()):
             row = full_data_structure[date_key][time_key]
-            processed_data.append(row)
-            total_incoming_sum += row.get("_raw_incoming", 0)
-            total_outcoming_sum += row.get("_raw_outcoming", 0)
-            data_points_count += 1
+            processed_data.append(row) # เพิ่ม row เข้าไปใน list ข้อมูลที่ประมวลผลแล้ว
+
+            total_incoming_sum += row.get("_raw_incoming", 0) # รวมค่าดิบ
+            total_outcoming_sum += row.get("_raw_outcoming", 0) # รวมค่าดิบ
+            data_points_count += 1 # นับจำนวนจุดข้อมูล
 
     average_incoming = 0
     average_outcoming = 0
     if data_points_count > 0:
-        average_incoming = round(total_incoming_sum / data_points_count)
+        average_incoming = round(total_incoming_sum / data_points_count) # คำนวณค่าเฉลี่ยและปัดเศษ
         average_outcoming = round(total_outcoming_sum / data_points_count)
 
+    # สร้างแถว Grand Total (Average)
     grand_total_row = {
-        "รหัสหน่วยงาน": "Grand Total",
-        "ชื่อหน่วยงาน": "",
-        "วันที่และเวลา": "",
-        "ขนาดBandwidth (หน่วย Mbps)": "",
-        "In_Averagebps": f"{average_incoming:,}",
-        "Out_Averagebps": f"{average_outcoming:,}"
+        "รหัสหน่วยงาน": "Grand Total", # แสดงคำว่า "Grand Total"
+        "ชื่อหน่วยงาน": "",            # ว่างเปล่า
+        "วันที่และเวลา": "",           # ว่างเปล่า
+        "ขนาดBandwidth (หน่วย Mbps)": "", # ว่างเปล่า
+        "In_Averagebps": f"{average_incoming:,}", # แสดงค่าเฉลี่ย In_Averagebps พร้อมคอมม่า
+        "Out_Averagebps": f"{average_outcoming:,}" # แสดงค่าเฉลี่ย Out_Averagebps พร้อมคอมม่า
     }
 
     return desired_headers_th, processed_data, grand_total_row
-
-def export_to_csv(headers, data, filename, job_id, node_name):
-    """
-    สร้างและบันทึกไฟล์ CSV
-    Parameters:
-    - headers (list): รายชื่อหัวข้อคอลัมน์
-    - data (list): ข้อมูลที่จะเขียนลง CSV (รวม Grand Total แล้ว)
-    - filename (str): ชื่อไฟล์ CSV ที่จะบันทึก
-    - job_id (str): ID ของงาน (สำหรับ logging)
-    - node_name (str): ชื่อ Node (สำหรับ logging)
-    Returns:
-    - tuple: (bool, str) -> (True หากสำเร็จ, ข้อความสถานะ)
-    """
-    try:
-        # เปิดไฟล์ในโหมด 'w' (write), 'newline=''' เพื่อป้องกันบรรทัดว่าง, 'utf-8-sig' สำหรับ BOM (Byte Order Mark)
-        # เพื่อให้ Excel เปิดภาษาไทยได้ถูกต้อง
-        with open(filename, 'w', newline='', encoding='utf-8-sig') as f:
-            cw = csv.writer(f) # สร้าง CSV writer object
-            if headers and data:
-                cw.writerow(headers) # เขียนหัวข้อคอลัมน์
-                # ไม่จำเป็นต้องเก็บ last_customer_id/name สำหรับ CSV เพราะจะแสดงทุกแถว
-                for row in data:
-                    new_row = [
-                        row.get('รหัสหน่วยงาน', ''),
-                        row.get('ชื่อหน่วยงาน', ''),
-                        row.get('วันที่และเวลา', ''),
-                        row.get('ขนาดBandwidth (หน่วย Mbps)', ''),
-                        row.get('In_Averagebps', ''),
-                        row.get('Out_Averagebps', '')
-                    ]
-                    cw.writerow(new_row) # เขียนข้อมูลแต่ละแถว
-            else:
-                cw.writerow(["No Data"]) # กรณีไม่มีข้อมูล
-        #logger.info(f"✅ สร้าง CSV สำหรับ '{node_name}' สำเร็จแล้ว")
-        return True, "Success"
-    except Exception as e:
-        logger.error(f"❌ สร้าง CSV สำหรับ '{node_name}' ล้มเหลว: {e}")
 
 def export_to_csv(headers, data, filename, job_id, node_name):
     """
@@ -729,7 +719,7 @@ def process_file_in_background(file_stream, job_id):
         with status_lock:
             processing_status[job_id]['total'] = total_rows
             processing_status[job_id]['results'] = [] # เก็บผลลัพธ์ของแต่ละ Node/Interface
-            temp_dir = tempfile.mkdtemp(prefix=f"report_job_{job_id}_") # สร้างโฟลเดอร์ชั่วคราว
+            temp_dir = tempfile.mkdtemp() # สร้างโฟลเดอร์ชั่วคราว
             processing_status[job_id]['temp_dir'] = temp_dir # เก็บ path โฟลเดอร์ชั่วคราวไว้ในสถานะงาน
 
         logger.info(f"📊 เริ่มประมวลผลไฟล์ Excel มีทั้งหมด {total_rows} รายการ")
@@ -1069,5 +1059,5 @@ if __name__ == '__main__':
 
     # รัน Flask application
     # debug=True จะทำให้ Server รีโหลดอัตโนมัติเมื่อโค้ดเปลี่ยน และแสดง traceback ที่ละเอียดขึ้น
-    app.run(debug=True,host= '0.0.0.0',port=5050)
+    app.run(debug=True,host= '10.223.255.75',port=80)
 
