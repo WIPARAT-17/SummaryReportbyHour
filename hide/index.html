@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NT Report Generator</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        :root {
+            --nt-yellow: #ffd829;
+            --nt-black: #000000;
+            --nt-light-gray: #f0f0f0;
+            --nt-dark-gray: #333333;
+            --nt-text-color: #555;
+            --border-radius: 8px;
+            --shadow-light: 0 4px 20px rgba(0, 0, 0, 0.05);
+            --shadow-heavy: 0 8px 32px rgba(0, 0, 0, 0.1);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Sarabun', sans-serif;
+            font-size: 1.1rem;
+            color: var(--nt-text-color);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            position: relative;
+            z-index: 1;
+        }
+        
+        #myVideo {
+            position: fixed;
+            right: 0;
+            bottom: 0;
+            min-width: 100%;
+            min-height: 100%;
+            width: auto;
+            height: auto;
+            z-index: -2;
+            object-fit: cover;
+        }
+
+        .card-container {
+            background-color: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(10px);
+            padding: 3rem;
+            border-radius: 12px;
+            box-shadow: var(--shadow-heavy);
+            text-align: center;
+            width: 90%;
+            max-width: 800px;
+            max-height: 95vh;
+            border: 1px solid rgba(255, 255, 255, 0.5);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .logo {
+            max-width: 150px;
+            margin-bottom: 2rem;
+        }
+
+        h1 {
+            color: var(--nt-dark-gray);
+            font-size: 2.2rem;
+            margin-bottom: 1rem;
+            font-weight: 700;
+        }
+
+        .sub-title {
+            color: #888;
+            font-size: 1.2rem;
+            margin-bottom: 2.5rem;
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .file-upload-wrapper {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            border: none;
+            border-radius: var(--border-radius);
+            overflow: hidden;
+            box-shadow: none;
+        }
+
+        .file-upload-label {
+            background-color: var(--nt-yellow);
+            color: var(--nt-black);
+            padding: 1rem 0.5rem;
+            font-size: 1.4rem;
+            font-weight: bold;
+            text-align: center;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            border-radius: var(--border-radius);
+            width: 250px;
+            align-self: center;
+        }
+
+        #file-name {
+            flex-grow: 1;
+            padding: 0.8rem 1rem;
+            color: var(--nt-text-color);
+            font-size: 1.1rem;
+            line-height: 1.5rem;
+            text-align: center;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .file-upload-label:hover {
+            background-color: #ffdd44;
+            transform: translateY(-3px);
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        input[type="file"] {
+            display: none;
+        }
+
+       .button-group {
+            display: flex;
+            flex-direction: row; /* เปลี่ยนจาก column เป็น row */
+            justify-content: center; /* จัดให้อยู่ตรงกลาง */
+            align-items: center; /* จัดให้อยู่ในแนวเดียวกัน */
+            width: 100%;
+            max-width: 600px;
+        }
+
+        .btn {
+            font-family: 'Sarabun', sans-serif;
+            font-size: 1.2rem;
+            font-weight: bold;
+            padding: 1rem 2rem;
+            border: none;
+            border-radius: var(--border-radius);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 1rem;
+            /* ❌ เอา width: 100% ออก แล้วใช้เฉพาะปุ่มที่ต้องการ */
+        }
+
+        /* ถ้าปุ่มไหนอยากเต็มพื้นที่ (เช่น EXPORT) ให้กำหนดที่ .btn-primary */
+        .btn-primary {
+            font-size: 1.4rem;
+            padding: 1.2rem 2.5rem;
+            background-color: var(--nt-black);
+            color: #ffffff;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+            width: 100%;          /* ✅ ให้ปุ่มนี้เต็ม */
+            max-width: 300px;
+        }
+
+        .btn-secondary {
+            background-color: transparent;
+            color: var(--nt-dark-gray);
+            border: none;
+            box-shadow: none;
+            font-size: 1.2rem;
+            padding: 0.8rem 1.5rem;
+            width: auto;          /* ✅ ปล่อย auto */
+            max-width: none;      /* ❌ ไม่จำกัด */
+            text-decoration: none;
+        }
+
+        .btn-secondary:hover {
+
+            transform: translateY(-2px);
+
+        }
+
+        .btn-primary:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .status-area {
+            margin-top: 3rem;
+            padding: 2rem;
+            background-color: #ffd829; /* สีเหลืองอ่อน */
+            border: 1px solid #ffea2d;
+            border-radius: var(--border-radius);
+            text-align: left;
+            display: none;
+        }
+        
+        .status-header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .status-header i {
+            font-size: 2rem;
+            color: var(--nt-dark-gray);
+        }
+
+        .status-header p {
+            font-size: 1.3rem;
+            font-weight: bold;
+            color: var(--nt-dark-gray);
+        }
+
+        .progress-container {
+            width: 100%;
+            background-color: #fff;
+            border-radius: 5px;
+            overflow: hidden;
+            height: 30px;
+            box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        .progress-bar {
+            height: 100%;
+            background-color: #333333;
+            transition: width 0.3s ease;
+            text-align: center;
+            color: rgb(255, 255, 255);
+            line-height: 30px;
+            font-weight: bold;
+        }
+
+        .progress-text {
+            margin-top: 0.5rem;
+            color: var(--nt-text-color);
+            font-size: 1rem;
+        }
+        
+        .toggle-log-button {
+            background-color: var(--nt-black);
+            color: var(--nt-yellow);
+            border: none;
+            padding: 10px 20px;
+            border-radius: var(--border-radius);
+            font-size: 16px;
+            font-family: 'Sarabun', sans-serif;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+            margin-bottom: 10px;
+        }
+
+        .toggle-log-button:hover {
+            background-color: #222;
+        }
+
+        .log-container {
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid #ffd829;
+            border-radius: var(--border-radius);
+            background-color: #fff;
+            padding: 10px;
+            box-shadow: var(--shadow-light);
+            transition: all 0.5s ease-in-out;
+            width: 100%;
+        }
+        
+        .log-container.hidden {
+            max-height: 0;
+            padding: 0 10px;
+            overflow: hidden;
+            opacity: 0;
+            border: none;
+        }
+
+        .log-area {
+            margin-top: 1.5rem;
+            padding: 1rem;
+            background-color: #fff;
+            border-radius: var(--border-radius);
+            max-height: 200px;
+            font-family: monospace;
+            font-size: 0.9rem;
+            text-align: left;
+            line-height: 1.5;
+            white-space: pre-wrap;
+        }
+
+        .log-success { color: #28a745; }
+        .log-error { color: #dc3545; }
+        .log-warning { color: #ffc107; }
+        .log-info { color: #17a2b8; }
+
+        @media (max-width: 768px) {
+            .card-container {
+                padding: 2rem;
+            }
+            .btn {
+                font-size: 1rem;
+                padding: 0.8rem 1.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <video autoplay muted loop playsinline id="myVideo">
+        <source src="{{ url_for('static', filename='wallpaper.mp4') }}" type="video/mp4">
+        Your browser does not support HTML5 video.
+    </video>
+
+    <div class="card-container">
+        <img src="{{ url_for('static', filename='Logo-nt.png') }}" alt="โลโก้ NT" class="logo">
+        <h1>Summary Report by Hour</h1>
+        <p class="sub-title">อัปโหลดไฟล์ Excel เพื่อสร้าง Report</p>
+
+        <form id="upload-form">
+            <div class="form-group">
+                <div class="file-upload-wrapper">
+                    <label for="excel_file" class="file-upload-label">
+                        <i class="fa fa-upload"></i> Choose File
+                    </label>
+                    <div id="file-name">No file selected</div>
+                </div>
+                <input type="file" id="excel_file" name="excel_file" accept=".xlsx, .xls" required>
+            </div>
+
+            <div class="button-group">
+                <button id="submit-button" type="submit" class="btn btn-primary" disabled>
+                    <i class="fa fa-rocket"></i> EXPORT
+                </button>
+            </div>
+
+            <div class="bottom-buttons">
+                <a href="{{ url_for('static', filename='Example Excel File.xlsx') }}" download class="btn btn-secondary">
+                    <i class="fa fa-download"></i> Example File
+                </a>
+            </div>
+        </form>
+                
+        <div id="status-area" class="status-area">
+            <div class="status-header">
+                <p id="status-message">สถานะการประมวลผล</p>
+            </div>
+            
+            <div class="progress-section">
+                <div class="progress-container">
+                    <div id="progress-bar" class="progress-bar">
+                        <span id="progress-bar-text" class="progress-bar-text">0%</span>
+                    </div>
+                </div>
+                <p id="progress-text" class="progress-text">ประมวลผลแล้ว 0 จาก 0 รายการ</p>
+            </div>
+            <button id="toggleLogButton" class="toggle-log-button">แสดง Log</button>
+            <div id="logContainer" class="log-container hidden">
+                <div id="logArea" class="log-area"></div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        const form = document.getElementById('upload-form');
+        const fileInput = document.getElementById('excel_file');
+        const submitButton = document.getElementById('submit-button');
+        const fileNameDisplay = document.getElementById('file-name');
+        const statusArea = document.getElementById('status-area');
+        const statusMessage = document.getElementById('status-message');
+        const progressBar = document.getElementById('progress-bar');
+        const progressBarText = document.getElementById('progress-bar-text');
+        const progressText = document.getElementById('progress-text');
+        const logArea = document.getElementById('logArea');
+        const toggleLogButton = document.getElementById('toggleLogButton');
+        const logContainer = document.getElementById('logContainer');
+
+        let statusIntervalId;
+        let logIntervalId;
+        let currentJobId = null;
+        
+        fileInput.addEventListener('change', () => {
+            if (fileInput.files.length > 0) {
+                fileNameDisplay.textContent = fileInput.files[0].name;
+                submitButton.disabled = false;
+            } else {
+                fileNameDisplay.textContent = 'ยังไม่ได้เลือกไฟล์...';
+                submitButton.disabled = true;
+            }
+            statusArea.style.display = 'none';
+            logArea.innerHTML = '';
+            toggleLogButton.textContent = 'แสดง Log';
+            logContainer.classList.add('hidden');
+            clearIntervals();
+        });
+        
+        toggleLogButton.addEventListener('click', () => {
+            const isHidden = logContainer.classList.toggle('hidden');
+            if (isHidden) {
+                toggleLogButton.textContent = 'แสดง Log';
+            } else {
+                toggleLogButton.textContent = 'ซ่อน Log';
+                logArea.scrollTop = logArea.scrollHeight;
+            }
+        });
+
+        form.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            
+            const file = fileInput.files[0];
+            if (!file) {
+                alert('กรุณาเลือกไฟล์ Excel ก่อน');
+                return;
+            }
+            
+            submitButton.disabled = true;
+            
+            statusArea.style.display = 'block';
+            statusMessage.innerHTML = '📥 กำลังอัปโหลดและเริ่มประมวลผล...';
+            progressBar.style.width = '0%';
+            progressBarText.textContent = '0%';
+            progressText.textContent = 'ประมวลผลแล้ว 0 จาก 0 รายการ';
+            logArea.innerHTML = '';
+            toggleLogButton.textContent = 'แสดง Log';
+            logContainer.classList.add('hidden');
+            clearIntervals();
+            
+            const formData = new FormData();
+            formData.append('excel_file', file);
+            
+            try {
+                const response = await fetch('/generate_report', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'Server returned an error');
+                }
+                
+                const data = await response.json();
+                currentJobId = data.job_id;
+                
+                statusMessage.innerHTML = `▶️ การประมวลผลสำหรับไฟล์ <b>${file.name}</b> เริ่มต้นขึ้นแล้ว...`;
+                
+                statusIntervalId = setInterval(fetchStatus, 1000);
+                logIntervalId = setInterval(fetchLogs, 500);
+                
+            } catch (error) {
+                statusMessage.innerHTML = `❌ เกิดข้อผิดพลาดในการเชื่อมต่อ: ${error.message}`;
+                progressBar.style.width = '0%';
+                progressBarText.textContent = '0%';
+                progressText.textContent = 'ประมวลผลแล้ว 0 จาก 0 รายการ';
+                submitButton.disabled = false;
+                clearIntervals();
+            }
+        });
+        
+        function clearIntervals() {
+            if (statusIntervalId) {
+                clearInterval(statusIntervalId);
+                statusIntervalId = null;
+            }
+            if (logIntervalId) {
+                clearInterval(logIntervalId);
+                logIntervalId = null;
+            }
+        }
+        
+        async function fetchStatus() {
+            if (!currentJobId) return;
+            
+            try {
+                const statusResponse = await fetch(`/status/${currentJobId}`);
+                const statusData = await statusResponse.json();
+                
+                if (statusData.error) {
+                    statusMessage.innerHTML = `❌ เกิดข้อผิดพลาด: ${statusData.error}`;
+                    progressBar.style.width = '0%';
+                    progressBarText.textContent = '0%';
+                    progressText.textContent = '';
+                    clearIntervals();
+                    submitButton.disabled = false;
+                    return;
+                }
+                
+                if (statusData.canceled) {
+                    statusMessage.innerHTML = '⛔ การประมวลผลถูกยกเลิกแล้ว';
+                    progressBar.style.width = '0%';
+                    progressBarText.textContent = '0%';
+                    progressText.textContent = '';
+                    clearIntervals();
+                    submitButton.disabled = false;
+                    return;
+                }
+                
+                if (statusData.total > 0) {
+                    const processed = statusData.processed;
+                    const total = statusData.total;
+                    const percentage = (processed / total) * 100;
+                    
+                    progressBar.style.width = `${percentage}%`;
+                    progressBarText.textContent = `${Math.round(percentage)}%`;
+                    progressText.textContent = `ประมวลผลแล้ว ${processed} จาก ${total} รายการ`;
+                    
+                    if (statusData.completed) {
+                        statusMessage.innerHTML = '✅ Exportเสร็จสมบูรณ์!';
+                        clearIntervals();
+                        await fetchLogs();
+                        
+                        submitButton.disabled = false;
+                        
+                        const createLogEntry = (message, className) => {
+                            const logEntry = document.createElement('div');
+                            logEntry.textContent = message;
+                            logEntry.classList.add(className);
+                            logArea.appendChild(logEntry);
+                        };
+                        
+                        if (statusData.total > 0) {
+                            if (statusData.zip_file_path) {
+                                window.location.href = `/download_report/${currentJobId}`;
+                            } else {
+                                statusMessage.innerHTML += '<br><span style="color:red; font-size:0.9em;">ไม่สามารถสร้างไฟล์ ZIP ได้ โปรดตรวจสอบ Log หรือ Terminal</span>';
+                            }
+                            
+                            let csvSuccessCount = 0;
+                            let csvFailedFiles = [];
+                            let pdfSuccessCount = 0;
+                            let pdfFailedFiles = [];
+                            let skipCount = 0;
+                            
+                            if (statusData.results && statusData.results.length > 0) {
+                                statusData.results.forEach(result => {
+                                    if (result.error_message === "ข้อมูล NodeID หรือ Interface ID ไม่สมบูรณ์") {
+                                        skipCount++;
+                                    } else {
+                                        if (result.csv_success) {
+                                            csvSuccessCount++;
+                                        } else {
+                                            const identifier = (result.node_name && result.node_name.includes('_') && result.node_name.split('_').length >= 3) ?
+                                            `(${result.node_name.split('_').slice(-2).join('/')})` :
+                                            '';
+                                            csvFailedFiles.push(`${result.node_name || 'ไม่ระบุชื่อ'} ${identifier}`);
+                                        }
+                                        if (result.pdf_success) {
+                                            pdfSuccessCount++;
+                                        } else {
+                                            const identifier = (result.node_name && result.node_name.includes('_') && result.node_name.split('_').length >= 3) ?
+                                            `(${result.node_name.split('_').slice(-2).join('/')})` :
+                                            '';
+                                            pdfFailedFiles.push(`${result.node_name || 'ไม่ระบุชื่อ'} ${identifier}`);
+                                        }
+                                    }
+                                });
+                            }
+                            
+                            createLogEntry('✨ สรุปผลการ Export', 'log-info');
+                            createLogEntry(`✔ CSV: Export สำเร็จ ${csvSuccessCount} ไฟล์`, 'log-success');
+                            createLogEntry(`✔ PDF: Export สำเร็จ ${pdfSuccessCount} ไฟล์`, 'log-success');
+                            
+                            if (skipCount > 0) {
+                                createLogEntry(`⚠️ ข้ามการประมวลผล: ${skipCount} รายการ (NodeID/Interface ID ไม่สมบูรณ์)`, 'log-warning');
+                            }
+                            
+                            if (csvFailedFiles.length > 0) {
+                                createLogEntry(`✘ CSV: Export ไม่สำเร็จ ${csvFailedFiles.length} ไฟล์`, 'log-error');
+                                csvFailedFiles.forEach(fileName => {
+                                    createLogEntry(`- ${fileName}`, 'log-error');
+                                });
+                            }
+                            
+                            if (pdfFailedFiles.length > 0) {
+                                createLogEntry(`✘ PDF: Export ไม่สำเร็จ ${pdfFailedFiles.length} ไฟล์`, 'log-error');
+                                pdfFailedFiles.forEach(fileName => {
+                                    createLogEntry(`- ${fileName}`, 'log-error');
+                                });
+                            }
+                        } else {
+                            createLogEntry('⚠ การประมวลผลเสร็จสิ้น แต่ไม่พบข้อมูลที่ต้อง Export จากไฟล์ Excel', 'log-warning');
+                        }
+                        
+                        logArea.scrollTop = logArea.scrollHeight;
+                    }
+                }
+            } catch (error) {
+                console.error("Error fetching status:", error);
+                statusMessage.innerHTML = `❌ ข้อผิดพลาดในการอัปเดตสถานะ: ${error.message}`;
+                clearIntervals();
+                submitButton.disabled = false;
+            }
+        }
+        
+        async function fetchLogs() {
+            if (!currentJobId) return;
+            try {
+                const logResponse = await fetch(`/logs/${currentJobId}`);
+                const logData = await logResponse.json();
+                if (logData.logs && logData.logs.length > 0) {
+                    const existingLogMessages = new Set(Array.from(logArea.children).map(div => div.textContent));
+                    
+                    logData.logs.forEach(log => {
+                        if (!existingLogMessages.has(log)) {
+                            const logEntry = document.createElement('div');
+                            logEntry.textContent = log;
+                            
+                            if (log.startsWith('✅')) {
+                                logEntry.classList.add('log-success');
+                            } else if (log.startsWith('❌')) {
+                                logEntry.classList.add('log-error');
+                            } else if (log.startsWith('⚠️') || log.startsWith('⛔')) {
+                                logEntry.classList.add('log-warning');
+                            } else if (log.startsWith('📊') || log.startsWith('▶') || log.startsWith('📂') || log.startsWith('📥') || log.startsWith('🗑️') || log.startsWith('🧹') || log.startsWith('✨') || log.startsWith('📁')) {
+                                logEntry.classList.add('log-info');
+                            } else {
+                                logEntry.classList.add('log-info');
+                            }
+                            
+                            logArea.appendChild(logEntry);
+                            existingLogMessages.add(log);
+                        }
+                    });
+                    logArea.scrollTop = logArea.scrollHeight;
+                }
+            } catch (error) {
+                console.error("Error fetching logs:", error);
+            }
+        }
+    </script>
+</body>
+</html>
